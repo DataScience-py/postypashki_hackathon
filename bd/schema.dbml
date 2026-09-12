@@ -1,0 +1,200 @@
+Table courses {
+  course_id serial [pk]
+  course_name text [not null, unique]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table users {
+  hashed_user_id char(64) [pk, note: 'SHA-256(app_salt || telegram_user_id). НЕ username.']
+  first_seen_ts timestamptz [not null]
+  last_seen_ts timestamptz [not null]
+  first_touch_id uuid [ref: - touches.touch_id, note: 'первое касание пользователя']
+  birth_date date [note: 'только при явном opt-in']
+  newsletter_subscribed boolean [not null, default: false]
+  newsletter_subscribed_ts timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table campaigns {
+  campaign_id text [pk, note: 'напр. 2026-09-launch']
+  name text [not null]
+  campaign_type campaign_type [not null]
+  goal text
+  start_date date
+  end_date date
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table placements {
+  placement_id text [pk, note: 'напр. ch_erudichka_2026-09-05']
+  campaign_id text [not null, ref: > campaigns.campaign_id]
+  channel_name text [not null, note: 'конкретный внешний/свой канал']
+  format placement_format [not null]
+  publication_time timestamptz
+  planned_removal_time timestamptz
+  cost decimal(12,2) [not null, default: 0]
+  invite_link text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table creatives {
+  creative_id text [pk, note: 'напр. creative_A']
+  placement_id text [not null, ref: > placements.placement_id]
+  description text
+  media_type media_type [not null]
+  variant_label text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table tracking_codes {
+  code text [pk, note: 'короткий код для ?start= или QR']
+  campaign_id text [not null, ref: > campaigns.campaign_id]
+  placement_id text [not null, ref: > placements.placement_id]
+  creative_id text [ref: > creatives.creative_id]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table touches {
+  touch_id uuid [pk, default: `gen_random_uuid()`]
+  hashed_user_id char(64) [not null, ref: > users.hashed_user_id]
+  tracking_code text [ref: > tracking_codes.code, note: 'NULL = органика']
+  channel_name text [not null, note: 'денормализовано из placements']
+  event_type touch_event_type [not null]
+  ts timestamptz [not null]
+  is_first_touch boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (hashed_user_id, ts)
+    tracking_code
+    channel_name
+  }
+}
+
+Table interest_events {
+  interest_id uuid [pk, default: `gen_random_uuid()`]
+  hashed_user_id char(64) [not null, ref: > users.hashed_user_id]
+  course_id integer [not null, ref: > courses.course_id]
+  source_touch_id uuid [ref: > touches.touch_id]
+  interest_level interest_level [not null]
+  ts timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table conversations {
+  conversation_id uuid [pk, default: `gen_random_uuid()`]
+  hashed_user_id char(64) [not null, ref: > users.hashed_user_id]
+  interest_id uuid [ref: > interest_events.interest_id]
+  started_ts timestamptz [not null]
+  manager_tag text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table channel_posts {
+  post_id bigint [pk, note: 'нативный Telegram message id']
+  channel_name text [not null]
+  ts timestamptz [not null]
+  post_type post_type
+  has_price boolean [not null, default: false]
+  text_excerpt text
+  views integer
+  forwards integer
+  placement_id text [ref: > placements.placement_id]
+  collected_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (channel_name, ts)
+  }
+}
+
+Table operational_calendar {
+  event_id serial [pk]
+  event_date date [not null]
+  event_type calendar_event_type [not null]
+  course_id integer [ref: > courses.course_id]
+  price decimal(12,2)
+  discount_pct decimal(5,2)
+  campaign_id text [ref: > campaigns.campaign_id]
+  notes text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table payments {
+  payment_id serial [pk]
+  student_id text [not null, note: 'легаси-хэш от username из base.xlsx']
+  hashed_user_id char(64) [ref: > users.hashed_user_id, note: 'NULL если stitching не удался']
+  stitch_method stitch_method [not null, default: 'none']
+  course_id integer [not null, ref: > courses.course_id]
+  amount decimal(12,2) [not null]
+  ts timestamptz [not null]
+  order_group_id text [note: 'для пакетных покупок']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    student_id
+    hashed_user_id
+    (course_id, ts)
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ENUM-типы
+// ----------------------------------------------------------------------------
+
+Enum campaign_type {
+  external_ad
+  own_channel
+  referral
+  birthday
+  re_engagement
+  recovery
+}
+
+Enum placement_format {
+  post
+  story
+  native_integration
+  pinned_message
+  other
+}
+
+Enum touch_event_type {
+  bot_start
+  channel_join
+  post_click
+  manual_visit
+}
+
+Enum interest_level {
+  clicked_details
+  asked_price
+  clicked_manager_button
+}
+
+Enum post_type {
+  sale_post
+  discount
+  launch
+  native
+  content
+}
+
+Enum media_type {
+  text
+  image
+  video
+  mixed
+}
+
+Enum stitch_method {
+  deterministic
+  probabilistic
+  none
+}
+
+Enum calendar_event_type {
+  launch
+  discount
+  sale_post
+  ad_placement
+}
