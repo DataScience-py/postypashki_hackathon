@@ -18,16 +18,16 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from bot import simulator
-from src.attribution import run_all_models, MODELS
-from src.romi import romi_by_channel, format_romi
+from src.attribution import MODELS, run_all_models
+from src.forecast import backtest, mae, mape
+from src.forecast import load_daily_orders as load_forecast_orders
 from src.incrementality import (
-    load_daily_orders,
     diff_in_diff,
-    weekend_confound_range,
+    load_daily_orders,
     required_sample_size,
-    power_simulation,
+    weekend_confound_range,
 )
-from src.forecast import load_daily_orders as load_forecast_orders, backtest, mae, mape
+from src.romi import format_romi, romi_by_channel
 
 DB_PATH = "demo.db"
 BASE_XLSX = "data/base.xlsx"
@@ -114,7 +114,7 @@ def step4_real_data_blocks():
     print(f"   Эффект рекламы (DiD) = {did['effect_per_day']:+.2f} заказов/день")
 
     rng = weekend_confound_range(orders, "2026-08-09")
-    print(f"\n-- Всплеск 9 августа: скидка и выходной неразличимы --")
+    print("\n-- Всплеск 9 августа: скидка и выходной неразличимы --")
     print(
         f"   Заказов: {rng['spike_orders']:.0f}. Честная вилка эффекта рекламы: "
         f"от {rng['lower_bound']:.0f} до {rng['upper_bound']:.0f}"
