@@ -229,12 +229,12 @@ def run(
     seed_channels(conn)
     n_touched, n_organic = simulate_touches(conn, payments_df)
 
-    print(f"[simulator] Реальных строк продаж загружено: {len(payments_df)}")
+    print(f"Реальных строк продаж загружено: {len(payments_df)}")
     print(
-        f"[simulator] Синтетических касаний сгенерировано: {n_touched} "
+        f"Синтетических касаний сгенерировано: {n_touched} "
         f"(на {len(payments_df.groupby(['student_id','ts']))-n_organic} заказов с рекламой)"
     )
-    print(f"[simulator] Заказов без касаний (органика): {n_organic}")
+    print(f"Заказов без касаний (органика): {n_organic}")
     conn.close()
     return db_path
 
