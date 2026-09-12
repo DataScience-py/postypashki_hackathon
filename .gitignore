@@ -1,1 +1,32 @@
+# Сгенерированные артефакты demo.py — не результат, а побочный файл запуска
 demo.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Секреты — токен бота, соль для хэширования и т.п.
+.env
+*.env
+secrets.*
+
+# ОС / редакторы
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Логи, временные файлы
+*.log
+.pytest_cache/

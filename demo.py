@@ -9,6 +9,7 @@ ROMI -> (плюс два блока на 100% реальных данных: inc
     pip install -r requirements.txt
     python demo.py
 """
+
 import sqlite3
 import sys
 from pathlib import Path
@@ -20,8 +21,11 @@ from bot import simulator
 from src.attribution import run_all_models, MODELS
 from src.romi import romi_by_channel, format_romi
 from src.incrementality import (
-    load_daily_orders, diff_in_diff, weekend_confound_range,
-    required_sample_size, power_simulation,
+    load_daily_orders,
+    diff_in_diff,
+    weekend_confound_range,
+    required_sample_size,
+    power_simulation,
 )
 from src.forecast import load_daily_orders as load_forecast_orders, backtest, mae, mape
 
@@ -46,16 +50,21 @@ def step2_attribution():
     revenue_by_model = run_all_models(DB_PATH)
     for model in MODELS:
         print(f"\n  -- {model} --")
-        for channel, revenue in sorted(revenue_by_model[model].items(), key=lambda x: -x[1]):
+        for channel, revenue in sorted(
+            revenue_by_model[model].items(), key=lambda x: -x[1]
+        ):
             print(f"     {channel:15s} {revenue:>12,.0f} \u20bd".replace(",", " "))
     return revenue_by_model
 
 
 def step3_romi(revenue_by_model: dict):
-    section("ШАГ 3/4. ROMI и CAC — position_based, затраты по СИНТЕТИЧЕСКОЙ рыночной оценке")
+    section(
+        "ШАГ 3/4. ROMI и CAC — position_based, затраты по СИНТЕТИЧЕСКОЙ рыночной оценке"
+    )
     conn = sqlite3.connect(DB_PATH)
     cost_rows = conn.execute(
-        "SELECT channel_name, cost, cost_is_estimate FROM placements"
+        "SELECT channel_name, SUM(cost) as total_cost, MAX(cost_is_estimate) as is_estimate "
+        "FROM placements GROUP BY channel_name"
     ).fetchall()
     conn.close()
     cost = {ch: c for ch, c, _ in cost_rows}
@@ -65,18 +74,27 @@ def step3_romi(revenue_by_model: dict):
     revenue.setdefault("organic", 0.0)
     cost.setdefault("organic", 0.0)
 
-    orders_placeholder = {ch: 0 for ch in revenue}  # число заказов не нужно для romi(), только для CAC
-    results = romi_by_channel(revenue, cost, orders_placeholder, margin=0.7, estimated_channels=estimated)
+    orders_placeholder = {
+        ch: 0 for ch in revenue
+    }  # число заказов не нужно для romi(), только для CAC
+    results = romi_by_channel(
+        revenue, cost, orders_placeholder, margin=0.7, estimated_channels=estimated
+    )
     for r in results:
-        tag = " [СИНТЕТИЧЕСКАЯ оценка стоимости]" if r.cost_is_estimate else \
-              (" [затрат нет]" if r.cost == 0 else "")
-        print(f"  {r.channel:15s} revenue={r.revenue:>12,.0f} \u20bd  "
-              f"cost={r.cost:>8,.0f} \u20bd  ROMI(margin=0.7)={format_romi(r.romi)}{tag}".replace(",", " "))
-    print("\n  ВАЖНАЯ ОГОВОРКА: цифры ROMI здесь нереалистично велики, потому что")
-    print("  в демо один платёж за размещение (9-12 тыс ₽) сравнивается с выручкой")
-    print("  за весь период. В реальности на каждый канал приходилось бы много")
-    print("  размещений с разными датами и стоимостью — сама МЕХАНИКА расчёта")
-    print("  (romi_by_channel) от этого не меняется, изменится только объём cost.")
+        tag = (
+            " [СИНТЕТИЧЕСКАЯ оценка стоимости]"
+            if r.cost_is_estimate
+            else (" [затрат нет]" if r.cost == 0 else "")
+        )
+        print(
+            f"  {r.channel:15s} revenue={r.revenue:>12,.0f} \u20bd  "
+            f"cost={r.cost:>8,.0f} \u20bd  ROMI(margin=0.7)={format_romi(r.romi)}{tag}".replace(
+                ",", " "
+            )
+        )
+    print("\n  ВАЖНАЯ ОГОВОРКА: стоимость канала здесь = сумма 4 условных размещений")
+    print("  за период (не один пост), чтобы масштаб был сопоставим с выручкой —")
+    print("  но и это по-прежнему рыночная ОЦЕНКА, не реальные счета.")
 
 
 def step4_real_data_blocks():
@@ -85,27 +103,37 @@ def step4_real_data_blocks():
     print("\n-- Incrementality: DiD, продвижение ПРО 20-23.08 vs контроль СТАРТ --")
     orders = load_daily_orders(BASE_XLSX)
     did = diff_in_diff(orders, "2026-08-15", "2026-08-19", "2026-08-20", "2026-08-23")
-    print(f"   ПРО: {did['pro_pre']:.2f} -> {did['pro_treat']:.2f} заказов/день "
-          f"(+{did['pro_delta']:.2f})")
-    print(f"   СТАРТ (контроль): {did['start_pre']:.2f} -> {did['start_treat']:.2f} "
-          f"(+{did['start_delta']:.2f})")
+    print(
+        f"   ПРО: {did['pro_pre']:.2f} -> {did['pro_treat']:.2f} заказов/день "
+        f"(+{did['pro_delta']:.2f})"
+    )
+    print(
+        f"   СТАРТ (контроль): {did['start_pre']:.2f} -> {did['start_treat']:.2f} "
+        f"(+{did['start_delta']:.2f})"
+    )
     print(f"   Эффект рекламы (DiD) = {did['effect_per_day']:+.2f} заказов/день")
 
     rng = weekend_confound_range(orders, "2026-08-09")
     print(f"\n-- Всплеск 9 августа: скидка и выходной неразличимы --")
-    print(f"   Заказов: {rng['spike_orders']:.0f}. Честная вилка эффекта рекламы: "
-          f"от {rng['lower_bound']:.0f} до {rng['upper_bound']:.0f}")
+    print(
+        f"   Заказов: {rng['spike_orders']:.0f}. Честная вилка эффекта рекламы: "
+        f"от {rng['lower_bound']:.0f} до {rng['upper_bound']:.0f}"
+    )
 
     n = required_sample_size(0.05, 0.5)
-    print(f"\n-- Holdout на будущее: нужно {n} человек на группу (baseline 5%, лифт +50%) --")
+    print(
+        f"\n-- Holdout на будущее: нужно {n} человек на группу (baseline 5%, лифт +50%) --"
+    )
 
     print("\n-- Прогноз продаж: backtest бейзлайнов (walk-forward) --")
     daily = load_forecast_orders(BASE_XLSX)
     y = daily["n_orders"].values
     bt = backtest(y, daily["date"])
     for m in ["naive", "seasonal7", "ma7", "wd_profile"]:
-        print(f"   {m:12s} MAE={mae(bt['actual'].values, bt[m].values):5.2f}  "
-              f"MAPE={mape(bt['actual'].values, bt[m].values):6.1f}%")
+        print(
+            f"   {m:12s} MAE={mae(bt['actual'].values, bt[m].values):5.2f}  "
+            f"MAPE={mape(bt['actual'].values, bt[m].values):6.1f}%"
+        )
 
 
 def final_summary():
